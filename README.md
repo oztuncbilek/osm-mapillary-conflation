@@ -34,11 +34,11 @@ To set up the environment using Docker, follow these steps:
 1. Pull the PostGIS Docker image:
    ```bash
    docker pull postgis/postgis:14-3.3
-```
+   ```
 2. Run the container:
    ```bash
    docker run --name postgis_db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=yourpassword -e POSTGRES_DB=osm_mapillary -p 5432:5432 -d postgis/postgis:14-3.3
-```
+   ```
 3. Use pgAdmin to connect to the database and restore the provided backup.
 
 ## License

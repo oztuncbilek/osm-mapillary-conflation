@@ -6,24 +6,53 @@
 DROP TABLE IF EXISTS results.end_nodes;
 
 WITH way_nodes AS (
-	SELECT id AS way_id, unnest(nodes) AS node_id, generate_subscripts(nodes, 1) AS index
+    SELECT 
+        id AS way_id, 
+        unnest(nodes) AS node_id, 
+        generate_subscripts(nodes, 1) AS index
     FROM osm.occ_sql_postgis_ways
 ),
 first_last_index AS (
-    -- please provide the index of the first and last node for every way based on way_nodes:
-    -- FIELDS: way_id, index_min, index_max
+    SELECT 
+        way_id, 
+        MIN(index) AS index_min, 
+        MAX(index) AS index_max
+    FROM way_nodes
+    GROUP BY way_id
 ),
 first_last_nodes AS (
-    -- please provide per way the first and last node ID:
-    -- FIELDS: way_id, first_node_id, last_node_id
+    SELECT 
+        wn.way_id, 
+        wn.node_id AS first_node_id,
+        NULL AS last_node_id 
+    FROM way_nodes wn
+    JOIN first_last_index fli ON wn.way_id = fli.way_id AND wn.index = fli.index_min
+    UNION
+    SELECT 
+        wn.way_id, 
+        NULL AS first_node_id,  
+        wn.node_id AS last_node_id
+    FROM way_nodes wn
+    JOIN first_last_index fli ON wn.way_id = fli.way_id AND wn.index = fli.index_max
 ),
 middle_nodes AS (
-    -- please provide per way all nodes which are not the first or last ones
-    -- FIELDS: way_id, node_id
+    SELECT 
+        wn.way_id, 
+        wn.node_id
+    FROM way_nodes wn
+    LEFT JOIN first_last_index fli ON wn.way_id = fli.way_id
+    WHERE wn.index != fli.index_min AND wn.index != fli.index_max
 ),
 first_or_last_nodes AS (
-    -- please provide per link the first and last node ID per way as a flat list
-    -- FIELDS: way_id, node_id
+    SELECT 
+        way_id, 
+        first_node_id AS node_id
+    FROM first_last_nodes
+    UNION
+    SELECT 
+        way_id, 
+        last_node_id AS node_id
+    FROM first_last_nodes
 ),
 intersection_first_or_last_with_middle AS (
     -- please provide a list of nodes where the first or last node of a way is also a middle node of another way

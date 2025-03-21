@@ -255,74 +255,73 @@ JOIN results.new_nodes non_ref_node ON non_ref_node.node_id = non_ref_node_id;
 DROP table if exists results.bus_stop_link ;
 
 WITH roads AS (
-    -- there are a lot of links which are no roads. Please specify a suitable filter in order to come to a good result
-    select *
-    from results.links road
-    WHERE -- please specify a filter so that we only process roads
+    SELECT *
+    FROM results.links
+    WHERE highway IN ('primary', 'secondary', 'tertiary', 'residential', 'service')
 ),
 node_link_count AS (
-    -- please create a query which returns the information how many links reference a certain node ID
-    -- FIELDS: node_id, count
+  SELECT node_id, COUNT(*) AS count
+    FROM (
+        SELECT ref_node_id AS node_id FROM roads
+        UNION ALL
+        SELECT non_ref_node_id AS node_id FROM roads
+    ) AS nodes
+    GROUP BY node_id
+
 ),
 one_way_nodes AS (
-    -- we want to filter out some certain links (intersection internal) which are present at intersections
-    SELECT distinct nn.node_id
+   SELECT DISTINCT nn.node_id
     FROM results.new_nodes nn
-    JOIN roads r on ref_node_id = nn.node_id or non_ref_node_id = nn.node_id
-    where r.oneway = 'yes'
+    JOIN roads r ON nn.node_id = r.ref_node_id OR nn.node_id = r.non_ref_node_id
+    WHERE r.oneway = 'yes'
 ),
 intersection_internal_links AS (
-    -- please add the conditions which filter out intersections with less than three links
-    select r.*
-    from roads r
-    join node_link_count nlc_ref on nlc_ref.node_id = ref_node_id
-    join node_link_count nlc_non_ref on nlc_non_ref.node_id = non_ref_node_id
-    where length_cm < 3000
-    and -- please add condition
-    and -- please add condition
-    and ref_node_id in (select node_id from one_way_nodes)
-    and non_ref_node_id in (select node_id from one_way_nodes)
+   SELECT r.*
+    FROM roads r
+    JOIN node_link_count nlc_ref ON nlc_ref.node_id = r.ref_node_id
+    JOIN node_link_count nlc_non_ref ON nlc_non_ref.node_id = r.non_ref_node_id
+    WHERE r.length_cm < 3000 -- Kısa linkleri filtrele
+      AND nlc_ref.count >= 3 -- En az 3 linke bağlı node'lar
+      AND nlc_non_ref.count >= 3 -- En az 3 linke bağlı node'lar
+      AND r.ref_node_id IN (SELECT node_id FROM one_way_nodes)
+      AND r.non_ref_node_id IN (SELECT node_id FROM one_way_nodes)
 ),
 link_not_intersection_internal AS (
-    -- now please remove the intersection_internal_links from the roads query. Return all fields of the road
+    SELECT *
+    FROM roads
+    WHERE link_id NOT IN (SELECT link_id FROM intersection_internal_links)
 ),
 bus_stops AS (
-    -- please add a buffer of 30 meters around each bus stop
-    select
-           id as sign_id,
-           geom,
-           _ADD_BUFFER_OF_30_METERS_ as buffer
-    from mapillary.bus_stops
+    SELECT
+        id AS sign_id,
+        geom,
+        ST_Buffer(geom::geography, 30)::geometry AS buffer -- 30 metrelik buffer
+    FROM mapillary.bus_stops
 ),
 distances AS (
-    -- please calculate the distance in centimeters between the bus stop and the links which intersect the buffer
-    -- please add the intersection condition (links within the 30 meters buffer of the bus stop)
-	select
-	       r.link_id as link_id,
-	       r.geometry,
-	       bus_stops.sign_id,
-	       _DISTANCE_BETWEEN_BUS_STOP_AND_LINK_IN_CENTIMETERS::integer as dist_cm
-	from link_not_intersection_internal r, bus_stops
-	where -- please add the intersection condition (links within the buffer of the bus stop)
-	order by sign_id, dist_cm asc
+    SELECT
+        r.link_id,
+        r.geometry,
+        bs.sign_id,
+        ST_Distance(bs.geom::geography, r.geometry::geography)::integer AS dist_cm
+    FROM link_not_intersection_internal r, bus_stops bs
+    WHERE ST_Intersects(bs.buffer, r.geometry) 
+    ORDER BY bs.sign_id, dist_cm ASC
 ),
 bus_stop_link AS (
-    -- now please select the distance record with the shortest distance per bus stop
-    select d.*
-    from distances d
-    join (
-        -- find the record with the shortest distance here
-        -- FIELDS: dist_cm, sign_id
-        SELECT -- ...
+    SELECT d.*
+    FROM distances d
+    JOIN (
+        SELECT sign_id, MIN(dist_cm) AS min_dist
         FROM distances
-        GROUP BY --...
-    ) as shortest on d.sign_id = shortest.sign_id and d.dist_cm = shortest.dist_cm
+        GROUP BY sign_id
+    ) AS shortest ON d.sign_id = shortest.sign_id AND d.dist_cm = shortest.min_dist
 )
 -- add the end we store one link per bus stop.
 -- Some bus stop have no links within the specified distance and therefore no record is created
-select *
-into results.bus_stop_link
-from bus_stop_link;
+SELECT *
+INTO results.bus_stop_link
+FROM bus_stop_link;
 
 /*
  ONCE WE HAVE IDENTIFIED THE CORRECT LINKS FOR THE BUS STOPS WE SHOULD ALSO CREATE THE SHORTEST LINE

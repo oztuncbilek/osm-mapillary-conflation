@@ -55,30 +55,47 @@ first_or_last_nodes AS (
     FROM first_last_nodes
 ),
 intersection_first_or_last_with_middle AS (
-    -- please provide a list of nodes where the first or last node of a way is also a middle node of another way
-    -- FIELDS: way_id, node_id
+    SELECT 
+        fln.way_id, 
+        fln.node_id
+    FROM first_or_last_nodes fln
+    JOIN middle_nodes mn ON fln.node_id = mn.node_id
 ),
 intersection_middle_with_middle AS (
-    -- please provide a list of nodes where a middle node of a way is also a middle node of another way
-    -- FIELDS: way_id, node_id
+    SELECT 
+        mn1.way_id, 
+        mn1.node_id
+    FROM middle_nodes mn1
+    JOIN middle_nodes mn2 ON mn1.node_id = mn2.node_id AND mn1.way_id != mn2.way_id
 ),
 split_nodes AS (
-    -- please combine the two lists intersection_first_or_last_with_middle and intersection_middle_with_middle
-    -- FIELDS: way_id, node_id, true AS split
+    SELECT 
+        way_id, 
+        node_id, 
+        true AS split
+    FROM intersection_first_or_last_with_middle
+    UNION
+    SELECT 
+        way_id, 
+        node_id, 
+        true AS split
+    FROM intersection_middle_with_middle
 ),
 new_nodes AS (
-    -- now we create a list of all the new first and end points of the links once we have transformed the ways to links
-    -- please add FIELD 'geom' to the nodes
-    SELECT DISTINCT nn.way_id, nn.node_id, nn.split, --add field 'geom' here
+    SELECT DISTINCT 
+        nn.way_id, 
+        nn.node_id, 
+        nn.split, 
+        n.geom
     FROM (
         SELECT way_id, node_id, split
         FROM split_nodes
         UNION
-        SELECT sen.way_id, sen.node_id, false AS split
-        FROM first_or_last_nodes sen
-     ) AS nn
-    JOIN -- please get the geom from some source...
-)
+        SELECT way_id, node_id, false AS split
+        FROM first_or_last_nodes
+    ) AS nn
+    JOIN osm.occ_sql_postgis_nodes n ON nn.node_id = n.id
+),
 /*
  THE RESULT OF THIS QUERY IS A TABLE WHICH CONTAINS THE IMPORTANT NODES OF A LINK.
  THESE NODES WILL BE USED TO TRANSFER THE WAYS INTO LINKS LATER ON.

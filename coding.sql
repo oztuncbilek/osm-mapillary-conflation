@@ -95,7 +95,7 @@ new_nodes AS (
         FROM first_or_last_nodes
     ) AS nn
     JOIN osm.occ_sql_postgis_nodes n ON nn.node_id = n.id
-),
+)
 /*
  THE RESULT OF THIS QUERY IS A TABLE WHICH CONTAINS THE IMPORTANT NODES OF A LINK.
  THESE NODES WILL BE USED TO TRANSFER THE WAYS INTO LINKS LATER ON.

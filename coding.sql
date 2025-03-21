@@ -130,102 +130,109 @@ WITH split_ways AS (
     WHERE en.split
 ),
 no_split_ways AS (
-    -- collect the ways which do not have to be split (hint: the list should contain 4798 ways)
-    -- FIELDS: way_id, geometry (polyline)
+    SELECT 
+        w.id AS way_id, 
+        w.nodes, 
+        ST_MakeLine(array_agg(n.geom ORDER BY wn.index)) AS geom
+    FROM osm.occ_sql_postgis_ways w
+    JOIN (
+        SELECT id AS way_id, unnest(nodes) AS node_id, generate_subscripts(nodes, 1) AS index
+        FROM osm.occ_sql_postgis_ways
+    ) wn ON w.id = wn.way_id
+    JOIN osm.occ_sql_postgis_nodes n ON wn.node_id = n.id
+    WHERE w.id NOT IN (SELECT way_id FROM results.end_nodes WHERE split = true)
+    GROUP BY w.id, w.nodes
 ),
 way_nodes AS (
 	SELECT id AS way_id, unnest(nodes) AS node_id, generate_subscripts(nodes, 1) AS index
     FROM osm.occ_sql_postgis_ways w
 ),
 self_intersecting AS (
-    -- please identify ways and nodes which intersect itself (this means that a node is not present only once per way)
-    -- FIELDS: way_id, node_id
+    SELECT way_id, node_id
+    FROM (
+        SELECT way_id, node_id, COUNT(*) AS cnt
+        FROM way_nodes
+        GROUP BY way_id, node_id
+        HAVING COUNT(*) > 1
+    ) AS self_intersect
 ),
 first_last_index AS (
-    -- please re-use your query from above (first_last_index)
+    SELECT way_id, MIN(index) AS index_min, MAX(index) AS index_max
+    FROM way_nodes
+    GROUP BY way_id
 ),
 first_last_nodes AS (
-	-- please re-use your query from above (first_last_nodes)
+    SELECT wn.way_id, 
+           wn.node_id AS first_node_id,
+           wn2.node_id AS last_node_id
+    FROM way_nodes wn
+    JOIN first_last_index fli ON wn.way_id = fli.way_id AND wn.index = fli.index_min
+    JOIN way_nodes wn2 ON wn.way_id = wn2.way_id AND wn2.index = fli.index_max
 ),
 split_nodes AS (
-    -- now it is getting interesting. Please put together a list of nodes which define the future shape of the links
-    -- and add again some geometry to the node IDs
-    -- FIELDS: way_id, index, node_id, geom
-    SELECT DISTINCT sn.way_id, sn.index, sn.node_id, --add field 'geom' here
+    SELECT DISTINCT sn.way_id, sn.index, sn.node_id, n.geom
     FROM (
-        -- adding split nodes
         SELECT sw.way_id, wn.index, sw.node_id
         FROM split_ways sw
-        -- something is missing here, but what?
+        JOIN way_nodes wn ON sw.way_id = wn.way_id AND sw.node_id = wn.node_id
         UNION
-        -- adding first node
-        SELECT fli.way_id, index_min AS index, w.node_id
+        SELECT fli.way_id, index_min AS index, fln.first_node_id AS node_id
         FROM first_last_index fli
-        -- something is missing here, but what?
-        JOIN split_ways sw ON sw.way_id = w.way_id
+        JOIN first_last_nodes fln ON fli.way_id = fln.way_id
         UNION
-        -- adding last node
-        SELECT fli.way_id, index_max AS index, w.node_id
+        SELECT fli.way_id, index_max AS index, fln.last_node_id AS node_id
         FROM first_last_index fli
-        -- something is missing here, but what?
-        JOIN split_ways sw ON sw.way_id = w.way_id
+        JOIN first_last_nodes fln ON fli.way_id = fln.way_id
     ) AS sn
-    JOIN -- please get the geom from some source...
+    JOIN osm.occ_sql_postgis_nodes n ON sn.node_id = n.id
 ),
 splitted_ways AS (
-    -- in this step we will do some interesting stuff. We will have to create pairs of 'one node and the next node'.
-    -- we will have to make use of the node index for this challenge.
-    -- You will get some help, but three conditions got lost - please find the correct conditions
     SELECT
-        sn1.way_id
-        , sn1.node_id AS ref_node_id
-        , sn2.node_id AS non_ref_node_id
-        , sn1.geom  AS ref_node_geometry
-        , sn2.geom  AS non_ref_node_geometry
+        sn1.way_id,
+        sn1.node_id AS ref_node_id,
+        sn2.node_id AS non_ref_node_id,
+        sn1.geom AS ref_node_geometry,
+        sn2.geom AS non_ref_node_geometry
     FROM split_nodes AS sn1
     LEFT JOIN split_nodes AS sn2 ON sn1.way_id = sn2.way_id AND sn1.index < sn2.index
     LEFT JOIN split_nodes AS sn3 ON sn2.way_id = sn3.way_id AND sn3.index > sn1.index AND sn3.index < sn2.index
-    WHERE -- condition no. 1 is missing
-        AND -- condition no. 2 is missing
-        AND -- condition no. 3 is missing
-    order by sn1.way_id, sn1.index, sn2.index
+    WHERE sn2.node_id IS NOT NULL
+    AND sn3.node_id IS NULL
+    ORDER BY sn1.way_id, sn1.index, sn2.index
 ),
 sub_linestring AS (
-    -- this step is tricky, since we have to disassemble some ways. Please identify the correct PostGIS functions for it
-	SELECT (_POSTGIS_FUNCTIONALITY_) AS geometry, -- << hint: some help is provided by the LEFT JOIN - you will need it!
-	sw.way_id,
-	ref_node_id,
-	non_ref_node_id
-	FROM splitted_ways sw
-	JOIN osm.occ_sql_postgis_ways wa ON wa.id = sw.way_id
-	LEFT JOIN self_intersecting non_ref_intersect ON non_ref_intersect.node_id = sw.non_ref_node_id
+    SELECT ST_MakeLine(ref_node_geometry, non_ref_node_geometry) AS geometry,
+           sw.way_id,
+           ref_node_id,
+           non_ref_node_id
+    FROM splitted_ways sw
+    JOIN osm.occ_sql_postgis_ways wa ON wa.id = sw.way_id
 ),
 split_links AS (
-    -- in this step please only calculate the length of the new links in centimeters
     SELECT
-        _CALCULATE_THE_LENGTH_IN_CENTIMETERS_::integer AS length_cm,
-        w.way_id,
+        ST_Length(sss.geometry) * 100 AS length_cm, 
+        w.way_id,  
         w.ref_node_id,
         w.non_ref_node_id,
         sss.geometry AS geometry
     FROM splitted_ways w
     JOIN sub_linestring sss ON (
-            w.way_id = sss.way_id
-            AND w.ref_node_id = sss.ref_node_id
-            AND w.non_ref_node_id = sss.non_ref_node_id
-        )
+        w.way_id = sss.way_id
+        AND w.ref_node_id = sss.ref_node_id
+        AND w.non_ref_node_id = sss.non_ref_node_id
+    )
 ),
 no_split_links AS (
-    -- the same for the ways where no splitting was needed
     SELECT
-       _CALCULATE_THE_LENGTH_IN_CENTIMETERS_::integer AS length_cm,
+        ST_Length(w.geom) * 100 AS length_cm,  
         w.way_id,
         fln.first_node_id AS ref_node_id,
         fln.last_node_id AS non_ref_node_id,
-        w.geometry AS way_geometry
+        w.geom AS geometry  
     FROM no_split_ways w
     JOIN first_last_nodes fln ON w.way_id = fln.way_id
 )
+
 SELECT row_number() OVER() AS link_id, links.*, w.highway, w.bicycle, w.foot, w.motor_vehicle, w.oneway
 INTO results.links
 FROM (

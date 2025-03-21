@@ -332,9 +332,16 @@ DROP TABLE IF EXISTS  results.connection;
 -- which shall contain the shortest line between the bus stop and the selected link stored in results.bus_stop_link
 -- FIELDS: link_id, sign_id, length_cm, geometry
 WITH connection AS (
-	-- put your query here
+    SELECT
+        bsl.link_id,
+        bsl.sign_id,
+        ST_Distance(bs.geom::geography, r.geometry::geography)::integer AS length_cm,
+        ST_ShortestLine(bs.geom, r.geometry) AS geometry
+    FROM results.bus_stop_link bsl
+    JOIN mapillary.bus_stops bs ON bsl.sign_id = bs.id
+    JOIN results.links r ON bsl.link_id = r.link_id
 )
-SELECT -- put your SELECT here
+SELECT  *
 INTO results.connection
 FROM connection;
 

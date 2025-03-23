@@ -14,32 +14,37 @@ The project consists of three main parts:
 2. **Data Normalization**: Correcting OSM ways to ensure topological correctness and splitting them into smaller links.
 3. **Data Conflation**: Connecting Mapillary bus stop observations to the nearest OSM road links.
 
-## Next Steps
+## Prerequisites
+- Docker and Docker Compose installed.
+- PostgreSQL and pgAdmin (optional, but recommended for easier database management).
+- Clone the repository
+
+1. Start the Docker containers:
+   ```bash
+   docker-compose up -d
+   ```
+2. Use pgAdmin to connect to the database and restore the provided backup.
+
+## Running the SQL Script
+Execute the results.sql script in pgAdmin or via the psql command-line tool to perform data normalization and conflation.
+
+## Current Status
 1. **Data Normalization**:
    - Identify and split OSM ways at intersection points.
    - Create topologically correct links from the normalized ways.
-   - Store the results in the `results.links` table.
-
 2. **Data Conflation**:
    - Filter out non-road links (e.g., bicycle paths) to focus on the true road network.
    - Find the nearest road link for each Mapillary bus stop.
-   - Create artificial geometries representing the shortest path from bus stops to their corresponding links.
 
-3. **Visualization**:
-   - Export the results as GeoJSON or Shapefile for visualization in GIS software.
+## Next Steps
+1. **Test Scenario Fixes**:
+   -The second test scenario is currently failing. 
+
+2. **Visualization**:
    - Create maps to showcase the conflated data.
 
-## Docker Setup
-To set up the environment using Docker, follow these steps:
-1. Pull the PostGIS Docker image:
-   ```bash
-   docker pull postgis/postgis:14-3.3
-   ```
-2. Run the container:
-   ```bash
-   docker run --name postgis_db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=yourpassword -e POSTGRES_DB=osm_mapillary -p 5432:5432 -d postgis/postgis:14-3.3
-   ```
-3. Use pgAdmin to connect to the database and restore the provided backup.
+## Notes
+The munich.osm file was not imported as the backup_OCC_PostGIS.backup already contained the necessary OSM data. It can be used for visualization step. 
 
 ## License
 This project is licensed under the MIT License. 

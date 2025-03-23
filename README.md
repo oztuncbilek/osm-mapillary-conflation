@@ -38,7 +38,7 @@ Execute the results.sql script in pgAdmin or via the psql command-line tool to p
 
 ## Next Steps
 1. **Test Scenario Fixes**:
-   -The second test scenario is currently failing. 
+   - The second test scenario is currently failing. 
 
 2. **Visualization**:
    - Create maps to showcase the conflated data.

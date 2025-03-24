@@ -14,6 +14,12 @@ The project consists of three main parts:
 2. **Data Normalization**: Correcting OSM ways to ensure topological correctness and splitting them into smaller links.
 3. **Data Conflation**: Connecting Mapillary bus stop observations to the nearest OSM road links.
 
+## Map Visualization
+
+Below is the visualization of Munich OSM Data Conflation results.
+
+![Map Visualization](docs/results/visualization.png)
+
 ## Prerequisites
 - Docker and Docker Compose installed.
 - PostgreSQL and pgAdmin (optional, but recommended for easier database management).
@@ -35,13 +41,12 @@ Execute the results.sql script in pgAdmin or via the psql command-line tool to p
 2. **Data Conflation**:
    - Filter out non-road links (e.g., bicycle paths) to focus on the true road network.
    - Find the nearest road link for each Mapillary bus stop.
+3. **Visualization**:
+   - Create map to showcase the conflated data.
 
 ## Next Steps
 1. **Test Scenario Fixes**:
    - The second test scenario is currently failing. 
-
-2. **Visualization**:
-   - Create maps to showcase the conflated data.
 
 ## Notes
 The munich.osm file was not imported as the backup_OCC_PostGIS.backup already contained the necessary OSM data. It can be used for visualization step. 

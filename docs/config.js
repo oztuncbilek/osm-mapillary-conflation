@@ -1,4 +1,4 @@
 //Add Add public Mapbox token
 export const config = {
-   MAPBOX_TOKEN: 'pk.eyJ1Ijoib3pjYXJ0byIsImEiOiJjbThubWhsaGowMXp2MmpzN2hlcGNzNDBoIn0.RDCQ_hdJYJZfz2m6-O8LZw'
+   MAPBOX_TOKEN: 'pk.eyJ1Ijoib3pjYXJ0byIsImEiOiJjbThua2NodnowMWJ6MmtzZGNiMGY2amh4In0.IqKMaRT6tl6MKtv7uUHBnA'
 };
